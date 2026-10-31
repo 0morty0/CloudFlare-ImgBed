@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>文件预览</title>
+<link rel="stylesheet" href="/plugins/file-preview/assets/style.css?v=1.0.0">
+<script type="module" src="/plugins/file-preview/assets/app.js?v=1.0.0"></script>
+</head>
+<body>
+<header id="toolbar">
+  <div class="meta">
+    <span id="badge" class="badge" data-kind="other">FILE</span>
+    <strong id="fname" title="文件名">加载中…</strong>
+    <span id="fsize" class="dim"></span>
+    <span id="finfo" class="dim"></span>
+  </div>
+  <div class="actions">
+    <button id="btnSource" class="btn" type="button">查看源码</button>
+    <button id="btnWrap" class="btn" type="button" title="切换自动换行">自动换行</button>
+    <button id="btnCopy" class="btn" type="button">复制内容</button>
+    <button id="btnRaw" class="btn" type="button">原始文件</button>
+    <button id="btnDownload" class="btn btn-primary" type="button">下载</button>
+  </div>
+</header>
+<main id="view">
+  <div class="loading">正在加载文件…</div>
+</main>
+</body>
+</html>

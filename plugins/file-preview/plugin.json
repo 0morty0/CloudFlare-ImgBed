@@ -1,0 +1,8 @@
+{
+  "name": "file-preview",
+  "displayName": "文件在线预览",
+  "version": "1.0.0",
+  "enabled": true,
+  "order": 100,
+  "description": "浏览器访问 /file/xxx 的文本类文件时返回带语法高亮的预览页；html/svg 以沙箱方式渲染，杜绝恶意脚本；支持 ?raw=1 强制原始内容、?download=1 强制下载。"
+}
