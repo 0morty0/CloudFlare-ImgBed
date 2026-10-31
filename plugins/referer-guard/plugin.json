@@ -4,6 +4,11 @@
   "version": "1.0.0",
   "enabled": true,
   "order": 10,
-  "allowMethods": ["GET", "HEAD", "POST"],
-  "description": "Referer 白名单防盗链：仅允许白名单站点（含子域）外链你的文件，站外盗链返回 403；直接打开链接可按配置放行。默认停用，需在 /plugins/referer-guard/ 面板开启。"
+  "allowMethods": [
+    "GET",
+    "HEAD",
+    "POST"
+  ],
+  "description": "Referer 白名单防盗链：仅允许白名单站点（含子域）外链你的文件，站外盗链返回 403；直接打开链接可按配置放行。默认停用，需在 /plugins/referer-guard/ 面板开启。",
+  "configPath": "/plugins/referer-guard/manager"
 }

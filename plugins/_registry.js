@@ -16,6 +16,7 @@ export const PLUGINS = [
     enabled: true,
     order: 10,
     allowMethods: ["POST"],
+    configPath: "/plugins/referer-guard/manager",
     module: plugin_referer_guard,
   },
   {
@@ -25,6 +26,7 @@ export const PLUGINS = [
     enabled: true,
     order: 20,
     allowMethods: ["POST"],
+    configPath: "/plugins/share-link/manager",
     module: plugin_share_link,
   },
   {
@@ -34,15 +36,17 @@ export const PLUGINS = [
     enabled: true,
     order: 30,
     allowMethods: ["POST"],
+    configPath: "/plugins/file-stats/manager",
     module: plugin_file_stats,
   },
   {
     name: "file-preview",
     displayName: "文件在线预览",
-    version: "1.1.0",
+    version: "1.2.0",
     enabled: true,
     order: 100,
     allowMethods: ["POST"],
+    configPath: "/plugins/file-preview/manager",
     module: plugin_file_preview,
   }
 ];

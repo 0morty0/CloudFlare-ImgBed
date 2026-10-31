@@ -56,6 +56,8 @@ function resolvePlugins() {
                 enabled: entry.enabled !== false,
                 // 允许的 HTTP 方法（插件路由安全边界：默认只读）
                 allowMethods: normalizeAllowMethods(entry.allowMethods),
+                // 插件专属配置页路径（供管理面板生成入口链接）
+                configPath: typeof entry.configPath === 'string' && entry.configPath.startsWith('/plugins/') ? entry.configPath : '',
                 module: mod,
             });
         } catch (e) {
@@ -151,6 +153,8 @@ export async function getPluginStatuses(env) {
         order: p.order,
         installed: true,
         runtimeEnabled: !disabled.has(p.name),
+        // 插件专属配置页（plugin.json 声明，管理面板提供入口链接）
+        configPath: typeof p.configPath === 'string' ? p.configPath : '',
     }));
 }
 

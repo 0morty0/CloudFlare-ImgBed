@@ -276,6 +276,113 @@ async function handleTrustApi(context, subPath) {
     return new Response('Method Not Allowed', { status: 405 });
 }
 
+// ==================== 信任审核台（管理员配置页） ====================
+//
+// /plugins/file-preview/manager：集中审核入口——输入文件路径，服务端
+// 拉取该文件内容并跑同一套静态审计引擎（htmlaudit.js，纯函数），
+// 管理员查看审计摘要后一键添加/移除信任。信任是全站语义：任何用户
+// 访问该文件的预览页都会进入信任模式（脚本/表单/弹窗可用）。
+
+const INSPECT_MAX_BYTES = 2 * 1024 * 1024;
+
+async function handleManagerPage(context) {
+    const { request } = context;
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+        return new Response('Method Not Allowed', { status: 405 });
+    }
+    const html = ASSET_MAP['manager.html'];
+    if (!html) return new Response('Not Found', { status: 404 });
+    return new Response(html, {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Robots-Tag': 'noindex',
+        },
+    });
+}
+
+/** 判断取回的内容是否按 HTML 审计（按 Content-Type 或扩展名兜底） */
+function looksLikeHtml(contentType, path) {
+    const ct = String(contentType || '').toLowerCase();
+    if (ct.includes('text/html') || ct.includes('application/xhtml')) return true;
+    const base = String(path || '').split('#')[0].split('?')[0].toLowerCase();
+    return base.endsWith('.html') || base.endsWith('.htm');
+}
+
+async function handleInspectApi(context) {
+    const { request, env, url } = context;
+
+    if (request.method !== 'GET') {
+        return jsonRes({ error: 'method_not_allowed' }, 405);
+    }
+    if (!(await isAdminRequest(context))) {
+        return jsonRes({ error: 'unauthorized', message: '需要管理员权限' }, 401);
+    }
+    if (!env.img_url) {
+        return jsonRes({ error: 'kv_unavailable' }, 503);
+    }
+
+    const path = url.searchParams.get('path') || '';
+    if (!isValidFilePath(path)) {
+        return jsonRes({ error: 'invalid_path', message: '路径必须是 /file/ 开头且不含非法字符' }, 400);
+    }
+
+    // 同源环回拉取原始内容；透传管理员 Cookie，受访问控制的文件同样可审计
+    let resp;
+    try {
+        resp = await fetch(url.origin + path + '?raw=1', {
+            method: 'GET',
+            headers: {
+                ...(request.headers.get('Cookie') ? { Cookie: request.headers.get('Cookie') } : {}),
+                Accept: 'text/html,*/*',
+            },
+            redirect: 'follow',
+        });
+    } catch (e) {
+        return jsonRes({ error: 'fetch_failed', message: String(e && e.message || e) }, 502);
+    }
+
+    if (!resp.ok) {
+        const tip = resp.status === 401 || resp.status === 403
+            ? '文件受访问控制且当前会话无权访问'
+            : resp.status === 404 ? '文件不存在' : `源响应 HTTP ${resp.status}`;
+        return jsonRes({ error: 'fetch_failed', status: resp.status, message: tip }, resp.status);
+    }
+
+    const contentType = resp.headers.get('Content-Type') || '';
+    if (!looksLikeHtml(contentType, path)) {
+        return jsonRes({ error: 'not_html', message: '该文件不是 HTML 类型，无需信任授权' }, 400);
+    }
+
+    const lenHeader = Number(resp.headers.get('Content-Length') || 0);
+    if (lenHeader > INSPECT_MAX_BYTES) {
+        return jsonRes({ error: 'too_large', message: '文件超过 2MB，不提供在线审计' }, 413);
+    }
+
+    let text;
+    try {
+        text = await resp.text();
+    } catch (e) {
+        return jsonRes({ error: 'read_failed' }, 502);
+    }
+    if (text.length > INSPECT_MAX_BYTES) {
+        return jsonRes({ error: 'too_large', message: '文件超过 2MB，不提供在线审计' }, 413);
+    }
+
+    const { auditHtml } = await import('./assets/htmlaudit.js');
+    const audit = auditHtml(text);
+    const trusted = (await readTrustedList(env)).includes(path);
+
+    return jsonRes({
+        path,
+        trusted,
+        contentType,
+        bytes: text.length,
+        audit,
+    });
+}
+
 /**
  * 插件路由：/plugins/file-preview/<subPath>
  * 对外提供预览页、前端静态资源与「HTML 信任」接口
@@ -287,6 +394,13 @@ export async function handleRoute(context, subPath) {
     // ---- HTML 信任授权接口 ----
     if (subPath === 'api/trust' || subPath === 'api/trust/list') {
         return await handleTrustApi(context, subPath);
+    }
+    // ---- 信任审核台（管理员配置页）----
+    if (subPath === 'manager' || subPath === 'manager/') {
+        return await handleManagerPage(context);
+    }
+    if (subPath === 'api/inspect') {
+        return await handleInspectApi(context);
     }
     if (subPath.startsWith('assets/')) {
         const key = subPath.slice('assets/'.length);

@@ -22,14 +22,14 @@ plugins/
 
 ## 已装插件速览
 
-| 插件 | 面板地址 | 说明 |
+| 插件 | 配置页 | 说明 |
 |---|---|---|
-| 文件在线预览 | —（挂在 `/file/*`） | 文本/代码/CSV/Markdown 预览；HTML 默认全禁沙箱，管理员可对单个文件开启信任（Blob + iframe sandbox 无同源权限，可跑脚本/表单/弹窗，带安全审计卡与全屏按钮） |
-| 临时分享链接 | `/plugins/share-link/` | 为单个文件生成带过期时间的 HMAC 签名链接，可撤回，不暴露真实路径 |
-| 防盗链 | `/plugins/referer-guard/` | Referer 白名单（含子域），站外盗链 403；默认停用，需面板开启 |
-| 访问统计 | `/plugins/file-stats/` | 每文件 GET 计数、Top 榜与最近流水；注意 KV 免费版每日约 1000 次写上限 |
+| 文件在线预览 | `/plugins/file-preview/manager` | 文本/代码/CSV/Markdown 预览；HTML 默认全禁沙箱。**信任审核台**：输入路径→服务端静态审计→一键添加信任，受信文件对所有访客启用脚本/表单/弹窗（Blob + iframe sandbox 无同源权限），带全屏按钮 |
+| 临时分享链接 | `/plugins/share-link/manager` | 为单个文件生成带过期时间的 HMAC 签名链接，可撤回，不暴露真实路径 |
+| 防盗链 | `/plugins/referer-guard/manager` | Referer 白名单（含子域），站外盗链 403；默认停用，需面板开启 |
+| 访问统计 | `/plugins/file-stats/manager` | 每文件 GET 计数、Top 榜与最近流水；注意 KV 免费版每日约 1000 次写上限 |
 
-插件图标：在 `/plugins/_manager/` 每个插件卡片的「设置」里填图标 URL（http/https），保存在 KV。
+插件图标：在 `/plugins/_manager/` 每个插件卡片的「设置」里填图标 URL（http/https），保存在 KV；插件声明了 `configPath` 时，设置区还会出现「打开该插件的配置页」链接。
 
 ## 快速开始
 

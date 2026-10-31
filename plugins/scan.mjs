@@ -71,6 +71,8 @@ function loadManifest(pluginDir) {
         order: Number.isFinite(manifest.order) ? manifest.order : 100,
         // 插件路由允许的非幂等方法（GET/HEAD 由网关统一放行，无需声明）
         allowMethods: sanitizeAllowMethods(manifest.allowMethods),
+        // 插件专属配置页路径（须位于 /plugins/ 命名空间内）
+        configPath: typeof manifest.configPath === 'string' && manifest.configPath.startsWith('/plugins/') ? manifest.configPath : '',
         relDir: rel,
         assetsDir: join(pluginDir, 'assets'),
     };
@@ -173,6 +175,7 @@ function main() {
             `    enabled: ${plugin.enabled},\n` +
             `    order: ${plugin.order},\n` +
             `    allowMethods: ${JSON.stringify(plugin.allowMethods)},\n` +
+            `    configPath: ${JSON.stringify(plugin.configPath)},\n` +
             `    module: ${varName},\n` +
             '  }'
         );

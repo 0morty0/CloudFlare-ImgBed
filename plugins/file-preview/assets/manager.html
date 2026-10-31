@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>HTML 信任审核台</title>
+<style>
+:root{--bg:#f6f8fa;--panel:#fff;--fg:#1f2328;--dim:#6e7781;--border:#d0d7de;--accent:#0969da;--ok:#1a7f37;--err:#cf222e;--warn-bg:#fff8c5;--warn-fg:#4d2d00}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1117;--panel:#161b22;--fg:#e6edf3;--dim:#8b949e;--border:#30363d;--accent:#388bfd;--ok:#3fb950;--err:#f85149;--warn-bg:#2d2200;--warn-fg:#e3b341}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.65 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:18px;margin:0 0 4px}
+.sub{color:var(--dim);font-size:12.5px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+.label{font-weight:600;font-size:13.5px;display:block;margin-bottom:8px}
+.pathrow{display:flex;gap:8px;flex-wrap:wrap}
+.pathrow input{flex:1;min-width:240px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:8px 12px;font:13.5px/1.4 ui-monospace,Consolas,monospace}
+.btn{appearance:none;border:1px solid var(--border);background:var(--panel);color:var(--fg);border-radius:8px;padding:8px 16px;font-size:13px;cursor:pointer;font-family:inherit}
+.btn:hover{border-color:var(--fg)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--err);border-color:var(--err);background:transparent}
+.btn:disabled{opacity:.5;cursor:default}
+.note{font-size:12px;color:var(--dim);margin-top:10px}
+.msg{font-size:12.5px;margin-top:10px;display:none;padding:8px 12px;border-radius:8px}
+.msg.ok{display:block;color:var(--ok)}
+.msg.err{display:block;color:var(--err);background:rgba(207,34,46,.08)}
+.audit{margin-top:14px;display:none}
+.audit.show{display:block}
+.audit-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--dim);margin-bottom:10px}
+.badge{font-size:11px;font-weight:600;border-radius:999px;padding:2px 10px;background:var(--warn-bg);color:var(--warn-fg)}
+.badge.on{background:rgba(26,127,55,.12);color:var(--ok)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;border-radius:999px;padding:2px 10px;background:var(--bg);border:1px solid var(--border);color:var(--dim)}
+.chip.warn{color:var(--fg)}
+.chip.hot{border-color:rgba(207,34,46,.45);color:var(--err)}
+.flag{font-size:12px;margin-top:8px;color:var(--err)}
+.hosts{font-size:12px;margin-top:8px;color:var(--dim);word-break:break-all}
+.clean{font-size:12px;margin-top:8px;color:var(--ok)}
+.actions{margin-top:14px;display:flex;gap:8px;flex-wrap:wrap}
+.list{margin:0;padding:0;list-style:none}
+.list li{display:flex;align-items:center;gap:8px;padding:10px 2px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.list li:last-child{border-bottom:none}
+.path{flex:1;min-width:0;font:13px/1.4 ui-monospace,Consolas,monospace;word-break:break-all}
+.path a{color:var(--accent);text-decoration:none}
+.login-tip{display:none;padding:10px 14px;border-radius:8px;background:rgba(207,34,46,.08);color:var(--err);font-size:13px;margin-bottom:14px}
+.login-tip a{color:var(--accent)}
+.empty{color:var(--dim);font-size:13px;padding:6px 2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>HTML 信任审核台</h1>
+  <div class="sub">file-preview 插件配置页 · 受信任的 HTML 文件对所有访客启用脚本 / 表单 / 弹窗交互（隔离沙箱运行，无站点数据权限）</div>
+
+  <div id="loginTip" class="login-tip">此页面需要管理员权限，请先 <a href="/login">登录管理后台</a> 后刷新。</div>
+
+  <div class="card">
+    <label class="label" for="path">审核一个 HTML 文件</label>
+    <div class="pathrow">
+      <input id="path" type="text" spellcheck="false" placeholder="/file/path/to/page.html">
+      <button id="btnInspect" class="btn primary" type="button">检测</button>
+    </div>
+    <div id="inspectMsg" class="msg"></div>
+    <div id="auditBox" class="audit">
+      <div class="audit-meta" id="auditMeta"></div>
+      <div class="chips" id="auditChips"></div>
+      <div id="auditFlags"></div>
+      <div class="actions">
+        <button id="btnTrust" class="btn primary" type="button" style="display:none">信任此文件（对所有用户生效）</button>
+        <button id="btnUntrust" class="btn danger" type="button" style="display:none">移除信任</button>
+      </div>
+    </div>
+    <div class="note">检测由服务端拉取文件内容并静态分析：脚本 / 表单 / 内联事件 / 外链域名 / 高危调用（eval、读取 Cookie、弹窗等）。判定信任前请确认来源可靠。</div>
+  </div>
+
+  <div class="card">
+    <label class="label">当前信任列表（<span id="trustCount">0</span>）</label>
+    <ul class="list" id="trustList"><li class="empty">加载中…</li></ul>
+  </div>
+
+  <div class="card">
+    <label class="label">信任意味着什么</label>
+    <div class="note" style="margin:0">
+      · 该文件预览页对<b>所有访客</b>启用完整交互：脚本执行、表单提交、弹窗<br>
+      · 脚本运行在浏览器隔离沙箱（无 allow-same-origin），无法读取本站 Cookie / 登录态<br>
+      · 文件原始响应的 CSP 防线不变：外站嵌入、直接访问仍然禁脚本<br>
+      · 相对路径资源无法解析（仅绝对地址可用）；不确定就先点「检测」看审计结果
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var $ = function(id){ return document.getElementById(id); };
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function showMsg(el, text, cls){ el.className='msg '+(cls||'err'); el.textContent=text; }
+
+  var inspectResult = null;
+
+  function renderAudit(data){
+    var a = data.audit || {};
+    var c = a.counts || {};
+    inspectResult = data;
+    $('auditBox').className = 'audit show';
+    var meta = $('auditMeta');
+    meta.innerHTML = '';
+    var size = (data.bytes||0);
+    meta.innerHTML =
+      '<span class="badge'+(data.trusted?' on':'')+'">'+(data.trusted?'已信任':'未信任')+'</span>' +
+      (a.title ? '<span>标题: '+esc(a.title)+'</span>' : '') +
+      '<span>'+esc(size.toLocaleString())+' 字节</span>' +
+      (data.contentType ? '<span>'+esc(data.contentType)+'</span>' : '');
+    var rows = [
+      ['脚本总数', c.scripts||0, true],
+      ['外链脚本', c.externalScripts||0, true],
+      ['表单', c.forms||0, false],
+      ['iframe', c.iframes||0, false],
+      ['内联事件', c.inlineEvents||0, false],
+    ];
+    var chips = $('auditChips');
+    chips.innerHTML = rows.map(function(r){
+      return '<span class="chip'+(r[1]>0?(r[2]?' hot':' warn'):'')+'">'+esc(r[0])+' '+r[1]+'</span>';
+    }).join('');
+    var flags = '';
+    if (a.metaRefresh) flags += '<div class="flag">meta refresh 自动跳转</div>';
+    (a.risky||[]).forEach(function(r){ flags += '<div class="flag">高危: '+esc(r)+'</div>'; });
+    if ((a.hosts||[]).length) flags += '<div class="hosts">外部资源域名: '+esc(a.hosts.join(' · '))+'</div>';
+    if (!flags) flags = '<div class="clean">未发现脚本、表单或高危调用</div>';
+    $('auditFlags').innerHTML = flags;
+    $('btnTrust').style.display = data.trusted ? 'none' : '';
+    $('btnUntrust').style.display = data.trusted ? '' : 'none';
+  }
+
+  function inspect(){
+    var path = $('path').value.trim();
+    if (!path) { showMsg($('inspectMsg'), '请输入文件路径（以 /file/ 开头）'); return; }
+    $('btnInspect').disabled = true;
+    showMsg($('inspectMsg'), '检测中…', 'ok');
+    fetch('api/inspect?path='+encodeURIComponent(path), { credentials:'same-origin' })
+      .then(function(r){ return r.json().then(function(j){ return {status:r.status, json:j}; }); })
+      .then(function(res){
+        $('btnInspect').disabled = false;
+        if (res.status === 401) { $('loginTip').style.display=''; showMsg($('inspectMsg'), '需要管理员权限'); $('auditBox').className='audit'; return; }
+        if (!res.json || res.json.error) {
+          $('auditBox').className = 'audit';
+          var map = { not_html:'该文件不是 HTML 类型，无需信任授权', too_large:'文件超过 2MB，不提供在线审计', invalid_path:'路径必须是 /file/ 开头且不含非法字符' };
+          showMsg($('inspectMsg'), map[res.json && res.json.error] || (res.json && res.json.message) || '检测失败');
+          return;
+        }
+        showMsg($('inspectMsg'), '检测完成', 'ok');
+        renderAudit(res.json);
+      })
+      .catch(function(){ $('btnInspect').disabled=false; showMsg($('inspectMsg'), '网络错误，请重试'); });
+  }
+
+  function setTrust(path, trusted){
+    fetch('api/trust', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path, trusted: trusted }),
+    })
+    .then(function(r){ return r.json().then(function(j){ return {status:r.status, json:j}; }); })
+    .then(function(res){
+      if (res.status === 401) { $('loginTip').style.display=''; showMsg($('inspectMsg'), '需要管理员权限'); return; }
+      if (res.json && res.json.ok) {
+        showMsg($('inspectMsg'), trusted ? '已添加信任：所有用户访问该文件预览时启用完整功能' : '已移除信任', 'ok');
+        loadList();
+        inspect();
+      } else {
+        showMsg($('inspectMsg'), (res.json && res.json.message) || '操作失败');
+      }
+    })
+    .catch(function(){ showMsg($('inspectMsg'), '网络错误，请重试'); });
+  }
+
+  function removeTrust(path){
+    if (!window.confirm('移除「'+path+'」的信任？移除后所有用户只能沙箱预览该文件。')) return;
+    setTrust(path, false);
+    if (inspectResult && inspectResult.path === path) inspect();
+  }
+
+  function loadList(){
+    fetch('api/trust/list', { credentials: 'same-origin' })
+      .then(function(r){ return r.json().then(function(j){ return {status:r.status, json:j}; }); })
+      .then(function(res){
+        if (res.status === 401) { $('loginTip').style.display=''; return; }
+        var list = (res.json && res.json.trusted) || [];
+        $('trustCount').textContent = list.length;
+        var ul = $('trustList');
+        ul.innerHTML = '';
+        if (!list.length) { ul.innerHTML = '<li class="empty">暂无受信任文件——上方输入路径检测后添加</li>'; return; }
+        list.forEach(function(path){
+          var li = document.createElement('li');
+          li.innerHTML =
+            '<span class="path"><a href="'+esc(path)+'" target="_blank" rel="noopener">'+esc(path)+'</a></span>' +
+            '<button class="btn" type="button" data-again="'+esc(path)+'">重新检测</button>' +
+            '<button class="btn danger" type="button" data-remove="'+esc(path)+'">移除</button>';
+          ul.appendChild(li);
+        });
+        Array.prototype.forEach.call(ul.querySelectorAll('[data-remove]'), function(b){
+          b.addEventListener('click', function(){ removeTrust(b.getAttribute('data-remove')); });
+        });
+        Array.prototype.forEach.call(ul.querySelectorAll('[data-again]'), function(b){
+          b.addEventListener('click', function(){ $('path').value = b.getAttribute('data-again'); inspect(); });
+        });
+      })
+      .catch(function(){ $('trustList').innerHTML = '<li class="empty">加载失败，请刷新重试</li>'; });
+  }
+
+  $('btnInspect').addEventListener('click', inspect);
+  $('path').addEventListener('keydown', function(e){ if (e.key === 'Enter') inspect(); });
+  $('btnTrust').addEventListener('click', function(){ if (inspectResult) setTrust(inspectResult.path, true); });
+  $('btnUntrust').addEventListener('click', function(){ if (inspectResult) removeTrust(inspectResult.path); });
+  loadList();
+})();
+</script>
+</body>
+</html>
