@@ -1,0 +1,9 @@
+{
+  "name": "file-stats",
+  "displayName": "访问统计",
+  "version": "1.0.0",
+  "enabled": true,
+  "order": 30,
+  "allowMethods": ["GET", "HEAD", "POST"],
+  "description": "统计每个文件的 GET 访问次数（尽力而为语义，KV 免费版每日写入约 1000 次上限），提供 Top 榜与最近 50 条流水。管理面板：/plugins/file-stats/，可一键清零。"
+}

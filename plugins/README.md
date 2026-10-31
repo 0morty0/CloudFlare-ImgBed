@@ -10,11 +10,26 @@ plugins/
 ├── _loader.js        # 运行时加载器（路由分发 + 请求/响应钩子 + 运行时开关）
 ├── _manager.js       # 插件管理面板（/plugins/_manager/）
 ├── scan.mjs          # 递归扫描器（新增/修改插件后运行）
+├── file-preview/     # 文件在线预览（HTML 审计 / 信任沙箱 / 全屏）
+├── share-link/       # 临时分享链接（带过期与撤回）
+├── referer-guard/    # 防盗链（Referer 白名单）
+├── file-stats/       # 文件访问统计（Top 榜 + 流水）
 └── <你的插件>/
     ├── plugin.json   # 插件清单
     ├── index.js      # 插件入口
     └── assets/       # （可选）前端资源，scan 时内嵌为 _assets.js
 ```
+
+## 已装插件速览
+
+| 插件 | 面板地址 | 说明 |
+|---|---|---|
+| 文件在线预览 | —（挂在 `/file/*`） | 文本/代码/CSV/Markdown 预览；HTML 默认全禁沙箱，管理员可对单个文件开启信任（Blob + iframe sandbox 无同源权限，可跑脚本/表单/弹窗，带安全审计卡与全屏按钮） |
+| 临时分享链接 | `/plugins/share-link/` | 为单个文件生成带过期时间的 HMAC 签名链接，可撤回，不暴露真实路径 |
+| 防盗链 | `/plugins/referer-guard/` | Referer 白名单（含子域），站外盗链 403；默认停用，需面板开启 |
+| 访问统计 | `/plugins/file-stats/` | 每文件 GET 计数、Top 榜与最近流水；注意 KV 免费版每日约 1000 次写上限 |
+
+插件图标：在 `/plugins/_manager/` 每个插件卡片的「设置」里填图标 URL（http/https），保存在 KV。
 
 ## 快速开始
 
@@ -31,6 +46,7 @@ plugins/
 | version | string | 版本号 |
 | enabled | boolean | 安装级开关：false 则 scan 不注册（需重跑 scan） |
 | order | number | 钩子执行顺序，升序 |
+| allowMethods | string[] | 插件路由允许的非幂等方法（如 `["POST"]`）；GET/HEAD 始终允许，默认仅只读 |
 | description | string | 描述（管理面板展示） |
 
 ## 插件入口 API（index.js）

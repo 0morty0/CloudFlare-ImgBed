@@ -1,0 +1,9 @@
+{
+  "name": "share-link",
+  "displayName": "临时分享链接",
+  "version": "1.0.0",
+  "enabled": true,
+  "order": 20,
+  "allowMethods": ["GET", "HEAD", "POST"],
+  "description": "为单个文件生成带过期时间的临时链接（HMAC 签名，可撤回），不暴露真实路径。访问者若持有登录会话，受访问控制的文件同样可打开。管理面板：/plugins/share-link/"
+}

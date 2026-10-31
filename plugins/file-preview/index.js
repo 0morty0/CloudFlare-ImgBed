@@ -157,13 +157,136 @@ function previewPageResponse() {
     });
 }
 
+// ==================== HTML 信任授权（可交互 HTML 预览） ====================
+//
+// 信任列表存 KV：plugins:file-preview:trusted（JSON 数组，封顶 200 条）。
+// 信任后预览页改用 Blob URL + sandbox 属性装载（allow-scripts / allow-forms /
+// allow-modals / allow-popups，始终不含 allow-same-origin），脚本运行在
+// opaque origin，无法读取宿主站点的 Cookie / localStorage / 凭据请求。
+// 原始文件的 CSP sandbox 响应头防线保持原样，外站嵌入 / 直接访问不受影响。
+
+const TRUSTED_KEY = 'plugins:file-preview:trusted';
+const TRUSTED_LIMIT = 200;
+
+function jsonRes(obj, status) {
+    return new Response(JSON.stringify(obj), {
+        status: status || 200,
+        headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Robots-Tag': 'noindex',
+        },
+    });
+}
+
+/** 校验可信任的文件路径：必须是 /file/*、无目录穿越、无控制字符 */
+function isValidFilePath(path) {
+    if (typeof path !== 'string' || path.length === 0 || path.length > 500) return false;
+    if (path !== '/file' && !path.startsWith('/file/')) return false;
+    if (path.includes('..') || path.includes('\\')) return false;
+    // eslint-disable-next-line no-control-regex
+    if (/[\u0000-\u001f\u007f]/.test(path)) return false;
+    return true;
+}
+
+async function readTrustedList(env) {
+    if (!env.img_url) return [];
+    try {
+        const raw = await env.img_url.get(TRUSTED_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr.filter(p => typeof p === 'string');
+    } catch (e) {
+        return [];
+    }
+}
+
+async function writeTrustedList(env, list) {
+    await env.img_url.put(TRUSTED_KEY, JSON.stringify(list));
+}
+
+async function isAdminRequest(context) {
+    const { env, request, url } = context;
+    try {
+        const { authenticate, AUTH_SCOPE } = await import('../functions/utils/auth/authCore.js');
+        const result = await authenticate({ env, request, url, authScope: AUTH_SCOPE.ADMIN });
+        return Boolean(result && result.authorized);
+    } catch (e) {
+        console.warn('[file-preview] 鉴权模块不可用:', e);
+        return false;
+    }
+}
+
+async function handleTrustApi(context, subPath) {
+    const { request, env, url } = context;
+
+    if (!env.img_url) {
+        return jsonRes({ error: 'kv_unavailable' }, 503);
+    }
+
+    // GET api/trust?path=... → {trusted}（公开只读，仅返回布尔值）
+    if (subPath === 'api/trust' && request.method === 'GET') {
+        const path = url.searchParams.get('path') || '';
+        if (!isValidFilePath(path)) {
+            return jsonRes({ trusted: false });
+        }
+        const list = await readTrustedList(env);
+        return jsonRes({ trusted: list.includes(path) });
+    }
+
+    // GET api/trust/list → 完整信任列表（仅管理员）
+    if (subPath === 'api/trust/list' && request.method === 'GET') {
+        if (!(await isAdminRequest(context))) {
+            return jsonRes({ error: 'unauthorized' }, 401);
+        }
+        return jsonRes({ trusted: await readTrustedList(env) });
+    }
+
+    // POST api/trust {path, trusted} → 添加/移除信任（仅管理员）
+    if (subPath === 'api/trust' && request.method === 'POST') {
+        if (!(await isAdminRequest(context))) {
+            return jsonRes({ error: 'unauthorized', message: '需要管理员权限' }, 401);
+        }
+        let body;
+        try {
+            body = await request.json();
+        } catch (e) {
+            return jsonRes({ error: 'invalid_json' }, 400);
+        }
+        const path = typeof body.path === 'string' ? body.path : '';
+        const trusted = body.trusted !== false;
+        if (!isValidFilePath(path)) {
+            return jsonRes({ error: 'invalid_path', message: '路径必须是 /file/ 开头且不含非法字符' }, 400);
+        }
+        let list = await readTrustedList(env);
+        if (trusted) {
+            if (!list.includes(path)) {
+                list.unshift(path);
+                if (list.length > TRUSTED_LIMIT) list = list.slice(0, TRUSTED_LIMIT);
+                await writeTrustedList(env, list);
+            }
+        } else {
+            list = list.filter(p => p !== path);
+            await writeTrustedList(env, list);
+        }
+        return jsonRes({ ok: true, path, trusted, count: list.length });
+    }
+
+    return new Response('Method Not Allowed', { status: 405 });
+}
+
 /**
  * 插件路由：/plugins/file-preview/<subPath>
- * 对外提供预览页与前端静态资源
+ * 对外提供预览页、前端静态资源与「HTML 信任」接口
  */
 export async function handleRoute(context, subPath) {
     if (subPath === '' || subPath === 'page') {
         return previewPageResponse();
+    }
+    // ---- HTML 信任授权接口 ----
+    if (subPath === 'api/trust' || subPath === 'api/trust/list') {
+        return await handleTrustApi(context, subPath);
     }
     if (subPath.startsWith('assets/')) {
         const key = subPath.slice('assets/'.length);

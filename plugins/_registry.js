@@ -3,15 +3,46 @@
  * 新增/删除插件后运行：node plugins/scan.mjs
  */
 
+import * as plugin_referer_guard from './referer-guard/index.js';
+import * as plugin_share_link from './share-link/index.js';
+import * as plugin_file_stats from './file-stats/index.js';
 import * as plugin_file_preview from './file-preview/index.js';
 
 export const PLUGINS = [
   {
-    name: "file-preview",
-    displayName: "文件在线预览",
+    name: "referer-guard",
+    displayName: "防盗链",
     version: "1.0.0",
     enabled: true,
+    order: 10,
+    allowMethods: ["POST"],
+    module: plugin_referer_guard,
+  },
+  {
+    name: "share-link",
+    displayName: "临时分享链接",
+    version: "1.0.0",
+    enabled: true,
+    order: 20,
+    allowMethods: ["POST"],
+    module: plugin_share_link,
+  },
+  {
+    name: "file-stats",
+    displayName: "访问统计",
+    version: "1.0.0",
+    enabled: true,
+    order: 30,
+    allowMethods: ["POST"],
+    module: plugin_file_stats,
+  },
+  {
+    name: "file-preview",
+    displayName: "文件在线预览",
+    version: "1.1.0",
+    enabled: true,
     order: 100,
+    allowMethods: ["POST"],
     module: plugin_file_preview,
   }
 ];

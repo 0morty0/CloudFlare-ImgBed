@@ -11,6 +11,7 @@
 import { renderMarkdown } from './markdown.js';
 import { highlightCode } from './highlight.js';
 import { parseCSV } from './csv.js';
+import { auditHtml, renderAuditCard } from './htmlaudit.js';
 
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024; // 与服务端插件配置一致
 const MAX_RENDER_LINES = 30000;
@@ -231,10 +232,101 @@ function renderMarkdownView(text) {
     setView('<article class="md-body">' + html + '</article>');
 }
 
-function renderHtmlView() {
-    const src = escapeHtml(buildRawUrl());
-    setView(`<div class="frame-wrap"><iframe class="sandbox-frame" src="${src}" sandbox="" referrerpolicy="no-referrer" title="HTML 沙箱预览"></iframe></div>
-    <div class="render-note">沙箱渲染：脚本、表单、弹窗均已被禁用，仅展示页面外观</div>`);
+// ---------- HTML 视图：审计卡 + 信任授权 + 全屏 ----------
+
+let trustState = null;   // null=未查询；true/false=信任状态
+let htmlBlobUrl = null;  // 信任模式下的 Blob URL（离开视图时回收）
+
+async function fetchTrust() {
+    try {
+        const r = await fetch('/plugins/file-preview/api/trust?path=' + encodeURIComponent(location.pathname), {
+            credentials: 'same-origin',
+        });
+        if (r.ok) {
+            const j = await r.json();
+            return j.trusted === true;
+        }
+    } catch (e) { /* 网络异常按未信任处理 */ }
+    return false;
+}
+
+async function setTrust(trusted) {
+    const btnId = trusted ? 'btnTrust' : 'btnUntrust';
+    try {
+        const r = await fetch('/plugins/file-preview/api/trust', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: location.pathname, trusted }),
+        });
+        if (r.status === 401) {
+            flashBtn(btnId, '需先登录管理端');
+            return;
+        }
+        if (r.ok) {
+            const j = await r.json();
+            trustState = j.trusted;
+            renderHtmlView();
+        } else {
+            flashBtn(btnId, '失败');
+        }
+    } catch (e) {
+        flashBtn(btnId, '网络错误');
+    }
+}
+
+function releaseBlobUrl() {
+    if (htmlBlobUrl) {
+        URL.revokeObjectURL(htmlBlobUrl);
+        htmlBlobUrl = null;
+    }
+}
+
+async function renderHtmlView() {
+    if (trustState === null) trustState = await fetchTrust();
+    const trusted = trustState === true;
+    const audit = auditHtml(currentText);
+
+    let frameHtml;
+    if (trusted) {
+        releaseBlobUrl();
+        const blob = new Blob([currentText], { type: 'text/html' });
+        htmlBlobUrl = URL.createObjectURL(blob);
+        frameHtml = `
+        <div class="frame-tools">
+            <span class="frame-note">信任模式：脚本 / 表单 / 弹窗已开启（隔离源运行，无本站权限）</span>
+            <button id="btnFullscreen" class="btn" type="button">全屏</button>
+            <button id="btnUntrust" class="btn" type="button">取消信任</button>
+        </div>
+        <div class="frame-wrap"><iframe id="trustedFrame" class="sandbox-frame" src="${htmlBlobUrl}" sandbox="allow-scripts allow-forms allow-modals allow-popups" allowfullscreen referrerpolicy="no-referrer" title="HTML 交互预览"></iframe></div>
+        <div class="render-note">相对路径的资源在信任模式下无法解析（仅绝对地址可用）；点「全屏」可放大查看</div>`;
+    } else {
+        const src = escapeHtml(buildRawUrl());
+        frameHtml = `
+        <div class="frame-tools">
+            <span class="frame-note">沙箱模式：脚本、表单、弹窗均已被禁用，仅展示页面外观</span>
+            <button id="btnTrust" class="btn btn-primary" type="button">信任此文件并启用交互</button>
+        </div>
+        <div class="frame-wrap"><iframe class="sandbox-frame" src="${src}" sandbox="" referrerpolicy="no-referrer" title="HTML 沙箱预览"></iframe></div>
+        <div class="render-note">信任后文件内脚本可执行（隔离沙箱，无法读取本站 Cookie 与数据）</div>`;
+    }
+
+    setView('<div class="html-stage">' + renderAuditCard(audit, trusted) + frameHtml + '</div>');
+
+    const trustBtn = $('btnTrust');
+    if (trustBtn) trustBtn.addEventListener('click', () => {
+        if (!window.confirm('信任后，该文件的 JavaScript 将被执行（在隔离沙箱内，无法访问本站数据）。确认信任此文件？')) return;
+        setTrust(true);
+    });
+    const untrustBtn = $('btnUntrust');
+    if (untrustBtn) untrustBtn.addEventListener('click', () => setTrust(false));
+    const fsBtn = $('btnFullscreen');
+    if (fsBtn) fsBtn.addEventListener('click', () => {
+        const frame = $('trustedFrame');
+        if (frame && frame.requestFullscreen) {
+            frame.requestFullscreen().catch(() => flashBtn('btnFullscreen', '被浏览器拒绝'));
+        }
+    });
 }
 
 function renderSvgView() {
@@ -421,3 +513,6 @@ async function main() {
 }
 
 main();
+
+// 离开预览页时回收信任模式的 Blob URL
+window.addEventListener('beforeunload', releaseBlobUrl);

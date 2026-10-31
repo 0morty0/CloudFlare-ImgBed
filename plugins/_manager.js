@@ -61,7 +61,47 @@ async function handleApi(context, subPath) {
     if (subPath === 'api/list' && request.method === 'GET') {
         const list = await getPluginStatuses(env);
         const hasKv = Boolean(env.img_url);
+        // 逐插件读取自定义图标 URL（plugins:icon:<name>）
+        if (hasKv) {
+            await Promise.all(list.map(async p => {
+                try {
+                    p.icon = (await env.img_url.get('plugins:icon:' + p.name)) || '';
+                } catch (e) {
+                    p.icon = '';
+                }
+            }));
+        } else {
+            list.forEach(p => { p.icon = ''; });
+        }
         return jsonResponse({ plugins: list, kvPersisted: hasKv, hint: hasKv ? '' : KV_FALLBACK_HINT });
+    }
+
+    if (subPath === 'api/icon' && request.method === 'POST') {
+        let body;
+        try {
+            body = await request.json();
+        } catch (e) {
+            return jsonResponse({ error: 'invalid_json' }, 400);
+        }
+        const name = typeof body.name === 'string' ? body.name : '';
+        const icon = typeof body.icon === 'string' ? body.icon.trim() : '';
+        if (!name) return jsonResponse({ error: 'missing_name' }, 400);
+        if (!/^[\w.-]+$/.test(name)) return jsonResponse({ error: 'invalid_name' }, 400);
+        // 图标 URL 白名单校验：仅 http(s)，长度受限；空值表示清除图标
+        if (icon !== '') {
+            if (icon.length > 500) return jsonResponse({ error: 'icon_too_long' }, 400);
+            if (!/^https?:\/\//i.test(icon)) return jsonResponse({ error: 'icon_must_be_http_url' }, 400);
+        }
+        try {
+            if (icon === '') {
+                await env.img_url.delete('plugins:icon:' + name);
+            } else {
+                await env.img_url.put('plugins:icon:' + name, icon);
+            }
+        } catch (e) {
+            return jsonResponse({ error: 'kv_write_failed' }, 500);
+        }
+        return jsonResponse({ ok: true, name, icon });
     }
 
     if (subPath === 'api/toggle' && request.method === 'POST') {
@@ -100,10 +140,22 @@ const MANAGER_HTML = [
     '.wrap{max-width:720px;margin:0 auto}',
     'h1{font-size:20px;margin-bottom:4px}',
     '.sub{color:var(--dim);font-size:12.5px;margin-bottom:20px}',
-    '.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;margin-bottom:12px}',
+    '.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;margin-bottom:12px}',
+    '.rowline{display:flex;align-items:center;gap:14px;width:100%}',
     '.info{flex:1;min-width:0}',
     '.name{font-weight:600;font-size:15px}',
     '.meta{color:var(--dim);font-size:12px;margin-top:2px;word-break:break-all}',
+    '.icon{width:40px;height:40px;border-radius:10px;flex:none;object-fit:cover;background:var(--bg);border:1px solid var(--border);display:block}',
+    '.rside{display:flex;align-items:center;gap:10px;flex:none}',
+    '.cog{appearance:none;border:1px solid var(--border);background:transparent;color:var(--dim);border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:inherit}',
+    '.cog:hover{color:var(--fg);border-color:var(--fg)}',
+    '.setting{display:none;border-top:1px solid var(--border);margin-top:12px;padding-top:12px;gap:8px;flex-wrap:wrap;align-items:center}',
+    '.setting.open{display:flex}',
+    '.setting input{flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:6px 10px;font-size:13px;font-family:inherit}',
+    '.sbtn{border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:8px;padding:6px 14px;font-size:12.5px;cursor:pointer;font-family:inherit}',
+    '.sbtn.ghost{background:transparent;color:var(--dim);border-color:var(--border)}',
+    '.sbtn:disabled{opacity:.6;cursor:default}',
+    '.smsg{width:100%;font-size:12px;color:var(--dim)}',
     '.switch{position:relative;width:46px;height:26px;flex:none}',
     '.switch input{opacity:0;width:0;height:0}',
     '.track{position:absolute;inset:0;background:var(--off);border-radius:999px;transition:.2s;cursor:pointer}',
@@ -150,10 +202,17 @@ const MANAGER_HTML = [
     '      ei.appendChild(en);ei.appendChild(em);empty.appendChild(ei);list.appendChild(empty);return;}',
     '  data.plugins.forEach(function(p){',
     '    var card=document.createElement("div");card.className="card";',
+    '    var row=document.createElement("div");row.className="rowline";',
+    '    if(p.icon){',
+    '      var img=document.createElement("img");img.className="icon";img.src=p.icon;img.alt="";img.loading="lazy";img.referrerPolicy="no-referrer";',
+    '      img.onerror=function(){img.style.display="none";};',
+    '      row.appendChild(img);',
+    '    }',
     '    var info=document.createElement("div");info.className="info";',
     '    var name=document.createElement("div");name.className="name";name.textContent=p.displayName;',
     '    var meta=document.createElement("div");meta.className="meta";meta.textContent=p.name+" · v"+p.version;',
     '    info.appendChild(name);info.appendChild(meta);',
+    '    var right=document.createElement("div");right.className="rside";',
     '    var sw=document.createElement("label");sw.className="switch";',
     '    var input=document.createElement("input");input.type="checkbox";input.checked=p.runtimeEnabled;',
     '    var track=document.createElement("span");track.className="track";',
@@ -168,7 +227,30 @@ const MANAGER_HTML = [
     '        if(!j.ok){input.checked=!next;showError("切换失败："+(j.error||"未知错误"));setTimeout(load,1500);return;}',
     '      }).catch(function(e){input.disabled=false;input.checked=!next;showError("网络错误："+e);setTimeout(load,1500);});',
     '    });',
-    '    card.appendChild(info);card.appendChild(sw);',
+    '    var cog=document.createElement("button");cog.type="button";cog.className="cog";cog.textContent="设置";',
+    '    right.appendChild(sw);right.appendChild(cog);',
+    '    row.appendChild(info);row.appendChild(right);',
+    '    card.appendChild(row);',
+    '    var panel=document.createElement("div");panel.className="setting";',
+    '    var inp=document.createElement("input");inp.type="text";inp.value=p.icon||"";inp.placeholder="图标 URL（https:// 开头，留空恢复默认）";',
+    '    var save=document.createElement("button");save.type="button";save.className="sbtn";save.textContent="保存图标";',
+    '    var cancel=document.createElement("button");cancel.type="button";cancel.className="sbtn ghost";cancel.textContent="收起";',
+    '    var msg=document.createElement("div");msg.className="smsg";msg.textContent="图标显示在本页插件卡片左侧；仅支持 http(s) 图片地址。";',
+    '    cog.addEventListener("click",function(){panel.classList.toggle("open");});',
+    '    cancel.addEventListener("click",function(){panel.classList.remove("open");});',
+    '    save.addEventListener("click",function(){',
+    '      save.disabled=true;msg.textContent="保存中…";',
+    '      fetch("api/icon",{method:"POST",credentials:"same-origin",',
+    '        headers:{"Content-Type":"application/json"},',
+    '        body:JSON.stringify({name:p.name,icon:inp.value.trim()})',
+    '      }).then(function(r){return r.json();}).then(function(j){',
+    '        save.disabled=false;',
+    '        if(j.ok){load();}',
+    '        else{msg.textContent="保存失败："+(j.error==="icon_must_be_http_url"?"图标必须是 http(s) 链接":j.error==="icon_too_long"?"图标 URL 过长":(j.error||"未知错误"));}',
+    '      }).catch(function(e){save.disabled=false;msg.textContent="网络错误，请重试";});',
+    '    });',
+    '    panel.appendChild(inp);panel.appendChild(save);panel.appendChild(cancel);panel.appendChild(msg);',
+    '    card.appendChild(panel);',
     '    list.appendChild(card);',
     '  });',
     '  if(data.hint){var h=document.createElement("div");h.className="hint";h.textContent=data.hint;list.appendChild(h);}',
@@ -196,7 +278,7 @@ function pageResponse() {
 export async function handleManagerRoute(context, subPath) {
     const { request } = context;
 
-    if (subPath === 'api/list' || subPath === 'api/toggle') {
+    if (subPath === 'api/list' || subPath === 'api/toggle' || subPath === 'api/icon') {
         return await handleApi(context, subPath);
     }
 

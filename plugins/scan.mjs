@@ -69,9 +69,23 @@ function loadManifest(pluginDir) {
         version: String(manifest.version || '0.0.0'),
         enabled: manifest.enabled !== false,
         order: Number.isFinite(manifest.order) ? manifest.order : 100,
+        // 插件路由允许的非幂等方法（GET/HEAD 由网关统一放行，无需声明）
+        allowMethods: sanitizeAllowMethods(manifest.allowMethods),
         relDir: rel,
         assetsDir: join(pluginDir, 'assets'),
     };
+}
+
+const ALLOWED_HTTP_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'];
+
+function sanitizeAllowMethods(declared) {
+    if (!Array.isArray(declared)) return [];
+    return [...new Set(
+        declared
+            .filter(m => typeof m === 'string')
+            .map(m => m.trim().toUpperCase())
+            .filter(m => ALLOWED_HTTP_METHODS.includes(m) && m !== 'GET' && m !== 'HEAD')
+    )];
 }
 
 // ==================== 内嵌前端资源 ====================
@@ -158,6 +172,7 @@ function main() {
             `    version: ${JSON.stringify(plugin.version)},\n` +
             `    enabled: ${plugin.enabled},\n` +
             `    order: ${plugin.order},\n` +
+            `    allowMethods: ${JSON.stringify(plugin.allowMethods)},\n` +
             `    module: ${varName},\n` +
             '  }'
         );

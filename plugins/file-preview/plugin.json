@@ -1,8 +1,9 @@
 {
   "name": "file-preview",
   "displayName": "文件在线预览",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "enabled": true,
   "order": 100,
-  "description": "浏览器访问 /file/xxx 的文本类文件时返回带语法高亮的预览页；html/svg 以沙箱方式渲染，杜绝恶意脚本；支持 ?raw=1 强制原始内容、?download=1 强制下载。"
+  "allowMethods": ["POST"],
+  "description": "浏览器访问 /file/xxx 的文本类文件时返回带语法高亮的预览页；html/svg 默认沙箱渲染，恶意脚本无法执行；管理员可将特定 HTML 文件标记为受信任，以 Blob+iframe sandbox（无同源权限）开放脚本/表单/弹窗交互，并提供安全审计卡与全屏按钮；支持 ?raw=1 强制原始内容、?download=1 强制下载。"
 }

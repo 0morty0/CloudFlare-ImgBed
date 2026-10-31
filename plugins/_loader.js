@@ -21,6 +21,22 @@ const PLUGIN_URL_PREFIX = '/plugins/';
 
 // ==================== 插件注册与初始化 ====================
 
+const ALLOWED_HTTP_METHODS = new Set(['GET', 'HEAD', 'POST', 'PUT', 'DELETE']);
+
+/** 归一化插件声明的可路由方法：非法值一律剔除，默认只读 */
+function normalizeAllowMethods(declared) {
+    if (!Array.isArray(declared)) return [];
+    return declared
+        .filter(m => typeof m === 'string')
+        .map(m => m.toUpperCase())
+        .filter(m => ALLOWED_HTTP_METHODS.has(m));
+}
+
+/** 判断插件是否声明了某方法（GET/HEAD 由网关统一放行，不查此表） */
+function pluginAllowsMethod(plugin, method) {
+    return Array.isArray(plugin && plugin.allowMethods) && plugin.allowMethods.includes(method);
+}
+
 let initPromise = null;
 
 /** 已解析的插件列表（plugin.json 中 enabled 的插件，按 order 升序） */
@@ -38,6 +54,8 @@ function resolvePlugins() {
                 version: entry.version || '0.0.0',
                 order: Number.isFinite(entry.order) ? entry.order : 100,
                 enabled: entry.enabled !== false,
+                // 允许的 HTTP 方法（插件路由安全边界：默认只读）
+                allowMethods: normalizeAllowMethods(entry.allowMethods),
                 module: mod,
             });
         } catch (e) {
@@ -175,16 +193,18 @@ export async function handlePluginRoute(context) {
         return await handleManagerRoute(context, subPath);
     }
 
-    if (request.method !== 'GET' && request.method !== 'HEAD') {
-        return new Response('Method Not Allowed', { status: 405 });
-    }
-
     const plugin = activePlugins.find(p => p.name === pluginName);
     if (!plugin) {
         return new Response(
             JSON.stringify({ error: `Plugin not found: ${pluginName}` }),
             { status: 404, headers: { 'Content-Type': 'application/json; charset=utf-8' } }
         );
+    }
+
+    // 方法白名单：GET/HEAD 始终允许；其余方法需插件在 plugin.json
+    // 中通过 allowMethods 显式声明（默认只读，缩小攻击面）
+    if (request.method !== 'GET' && request.method !== 'HEAD' && !pluginAllowsMethod(plugin, request.method)) {
+        return new Response('Method Not Allowed', { status: 405 });
     }
     if (!(await isRuntimeEnabled(env, pluginName))) {
         return new Response(
